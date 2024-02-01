@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+
+import sys
+import argparse
+import os
+import hashlib
+import fnmatch
+
+def extract_files(cat_files, output_directory, file_filter):
+    for cat_file in cat_files:
+        cat_file_name, cat_file_extension = os.path.splitext(cat_file)
+
+        with open(cat_file_name + ".cat", 'r') as f:
+            lines = f.readlines()
+
+        dat_file = open(cat_file_name + ".dat", "rb")
+
+        for line in lines:
+            parts = line.split()
+            if len(parts) == 4:
+                filename, size, timestamp, md5 = parts
+                size = int(size)
+                timestamp = int(timestamp)
+                path = os.path.dirname(filename)
+                if file_filter and not fnmatch.fnmatch(filename, file_filter):
+                    dat_file.seek(size, 1)
+                    continue
+
+                if not os.path.isdir(os.path.join(output_directory, path)):
+                    os.makedirs(os.path.join(output_directory, path))
+
+                try:
+                    extracted_file_name = os.path.join(output_directory, filename)
+                    extracted_file = open(extracted_file_name, "wb")
+                    extracted_file.write(dat_file.read(size))
+                    extracted_file.close()
+                    os.utime(extracted_file_name, (timestamp, timestamp))
+                    print(filename)
+                except IOError:
+                    sys.stderr.write("[IOERROR] %s" % os.path.join(output_directory, filename))
+                    exit(-1)
+
+def main():
+    parser = argparse.ArgumentParser(description='Extract X3, X4 games .dat files',
+                                     epilog="Example: unpack-dat --filter *.xml -o ./extracted")
+    parser.add_argument('--input', '-i', '-in', nargs='+', help='''
+      List of input files .cat or dat files.
+      If empty then use all .cat files in current directory
+      ''')
+    parser.add_argument('--out', '-o', '-out', help='Output directory', required=True)
+    parser.add_argument('--filter', '-f', help='Filter extracted files. (e.g "*.xml")')
+
+    args = parser.parse_args()
+
+    if not os.path.exists(args.out):
+        os.makedirs(args.out)
+
+    cat_files = args.input
+    if not cat_files:
+        cat_files = [ file for file in os.listdir(".") if file.lower().endswith(".cat") ]
+
+    if len(cat_files) == 0:
+        sys.stderr.write("No .cat files in current directory. Use --input param to specify .cat files\n")
+    else:
+        extract_files(cat_files, args.out, args.filter)
+
+if __name__ == "__main__":
+    main()
